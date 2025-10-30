@@ -1,0 +1,30 @@
+flowchart TB
+    %% Definizioni dei Nodi
+    classDef Pine stroke-width:1px, stroke-dasharray:none, stroke:#254336, fill:#27654A, color:#FFFFFF
+    style Client fill:#ccf,stroke:#333
+    style API fill:#cfc,stroke:#333
+    style DB fill:#ffc,stroke:#333
+    style Model fill:#f9c
+    style Index fill:#f9c
+    style Servizio fill:#FFE0B2
+
+      Searcher:::Pine
+    Client["Client (HTML, CSS, JS)"]
+    API["Server API (Python)"]
+    DB[("Database 
+    (Source of Truth)")]
+    
+    subgraph "Servizio"
+        Searcher["SemanticSearcher"]
+        Model["Modello (SentenceTransformer)"]
+        Index[("FAISS Index")]
+    end
+
+    %% Flusso di Ricerca
+    Client -- "a. fetch('/api/search')" --> API
+    API -- "b. Inoltra la richiesta" --> Searcher
+    Searcher -- "c. Codifica la query" --> Model
+    Searcher -- "d. Ricerca ID nell'indice" --> Index
+    Searcher -- "e. Recupera i dati degli ID" --> DB
+    Searcher -- "f. Restituisce i ticket" --> API
+    API -- "g. Restituisce JSON al Client" --> Client

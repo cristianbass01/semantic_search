@@ -1,0 +1,38 @@
+---
+config:
+  layout: dagre
+---
+flowchart TB
+ subgraph Servizio["Servizio"]
+        Searcher["SemanticSeacher"]
+        Model["Modello (SentenceTransformer)"]
+        Index[("FAISS Index")]
+        Queues["Buffer (Code ID)"]
+        BG_Thread["Background Thread"]
+  end
+    Client["Client (HTML, CSS, JS)"] -- "a. fetch('/api/ticket')" --> API["Server API (Python)"]
+    
+    API -- "b. Salva in DB" --> DB[("Database 
+    (Source of Truth)")]
+    API -- "c. Notifica il searcher" --> Searcher
+    Searcher -- "d. Aggiunge ID al Buffer" --> Queues
+    API -- "e. Restituisce 'OK' al Client" --> Client
+    Searcher -- "f. Sveglia il thread" --> BG_Thread
+    
+    BG_Thread@{ shape: subproc}
+    BG_Thread -. "g. Legge ID dal Buffer" .-> Queues
+    BG_Thread -. "h. Recupera dati aggiornati dal DB" .-> DB
+    BG_Thread -. "i. Codifica i nuovi dati" .-> Model
+    BG_Thread -. "l. Aggiorna Indice (remove/add)" .-> Index
+    
+
+     Searcher:::Pine
+    classDef Pine stroke-width:1px, stroke-dasharray:none, stroke:#254336, fill:#27654A, color:#FFFFFF
+    style Model fill:#f9c
+    style Index fill:#f9c
+    style Queues fill:#f9c
+    style BG_Thread fill:#f66,stroke:#fff,color:#fff
+    style Client fill:#ccf,stroke:#333
+    style API fill:#cfc,stroke:#333
+    style DB fill:#ffc,stroke:#333
+    style Servizio fill:#FFE0B2

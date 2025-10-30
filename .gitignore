@@ -1,1 +1,5 @@
+# Cartelle e file compilati di Python
 /.pytest_cache
+__pycache__/
+*.py[cod]
+*$py.class

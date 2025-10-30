@@ -12,8 +12,6 @@ L'applicazione si basa su un'architettura a tre componenti principali:
 
 Per un'analisi dettagliata si rimanda al documento **[report_search.pdf](report_search.pdf)**.
 
----
-
 ## Struttura del Progetto
 
 ```

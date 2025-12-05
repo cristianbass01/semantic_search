@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: semantic-search
+  name: semantic-search
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: semantic-search
+  strategy: {}
+  template:
+    metadata:
+      labels: 
+        app: semantic-search
+    spec:
+      volumes:
+        - name: data
+          emptyDir: {}
+
+      initContainers:
+        - name: semantic-init
+          image: cristianbassotto/semantic-init:0.0.10
+          envFrom:
+            - configMapRef:
+                name: init-env-cm
+          volumeMounts:
+            - name: data
+              mountPath: /init/data
+
+      containers:
+        - name: semantic-search
+          image: cristianbassotto/semantic-search:0.0.10
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "4"
+          envFrom:
+            - configMapRef:
+                name: env-cm
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: data
+              mountPath: /app/data

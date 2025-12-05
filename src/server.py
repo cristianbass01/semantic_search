@@ -10,14 +10,9 @@ It defines:
 
 import logging
 from flask import Flask, request, jsonify, render_template, Response
-from .search_utils import SemanticSearcher
-from . import db_utils 
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+from .search_engine import SemanticSearcher
+from . import db
+from . import config
 
 def create_app() -> Flask:
     """
@@ -39,7 +34,11 @@ def create_app() -> Flask:
     # Initialize the search service *once* when the app starts.
     # We attach it to the 'app' object to make it accessible
     # within all request contexts.
-    app.search_service = SemanticSearcher()
+    try:
+        app.search_service = SemanticSearcher()
+    except FileNotFoundError as e:
+        app.logger.critical(f"Startup failed: {e}")
+        return 1
 
     # --- Public Routes ---
 
@@ -103,7 +102,7 @@ def create_app() -> Flask:
             ticket_id_int = int(ticket_id)
             
             # 1. Delete from the source of truth (the database)
-            success, _ = db_utils.delete_tickets_by_ids([ticket_id_int])
+            success, _ = db.delete_tickets_by_ids([ticket_id_int])
             
             if not success:
                 return jsonify({"success": False, "message": "Ticket not found or DB error."}), 404
@@ -138,7 +137,7 @@ def create_app() -> Flask:
 
         try:
             # 1. Add to the source of truth (the database)
-            success, result = db_utils.add_ticket(data)
+            success, result = db.add_ticket(data)
             
             if not success:
                 # 'result' contains the error message on failure
@@ -184,7 +183,7 @@ def create_app() -> Flask:
             ticket_id_int = int(ticket_id)
             
             # 1. Update the source of truth (the database)
-            success, error_msg = db_utils.update_ticket(ticket_id_int, data)
+            success, error_msg = db.update_ticket(ticket_id_int, data)
             
             if not success:
                 status_code = 404 if error_msg == "Ticket not found" else 500
@@ -208,5 +207,5 @@ app = create_app()
 
 # --- server entry point ---
 if __name__ == "__main__":
-    app.logger.info("Starting development server...")
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    app.logger.info("Starting server...")
+    app.run(host="0.0.0.0", port=80, debug=config.DEBUG)

@@ -1,0 +1,22 @@
+{{ range $key, $value := .Values.volumeClaims }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "app.fullname" $ }}-{{ $key }}-pvc
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+spec:
+  storageClassName: {{ default (include "app.fullname" $ | printf "%s-%s-sc" $key) $value.storageClassName }}
+  accessModes:
+    {{- range $value.accessModes }}
+    - {{ . }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ $value.size }}
+  volumeMode: {{ default "Filesystem" $value.volumeMode }}
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" $ | nindent 6 }}
+---
+{{ end }}

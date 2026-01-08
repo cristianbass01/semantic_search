@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+redis
+rq
+psycopg2-binary
+sqlalchemy
+pgvector
+requests
+python-multipart

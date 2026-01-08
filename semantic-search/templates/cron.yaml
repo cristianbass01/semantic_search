@@ -1,0 +1,44 @@
+{{- range $key, $value := .Values.cronJobs -}}
+{{- if $value.enabled -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "app.fullname" $ }}-{{ $key }}-cronjob
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+spec:
+  schedule: {{ $value.schedule | quote }}
+  concurrencyPolicy: {{ $value.concurrencyPolicy }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: {{ $value.restartPolicy }}
+          containers:
+          {{- range $index, $job := $value.jobs }}
+            - name: {{ include "app.fullname" $ }}-{{ $key }}-job-{{ $index }}
+              image: "{{ $job.image.repository }}:{{ $job.image.tag }}"
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                {{- if $job.configmaps }}
+                {{- range $job.configmaps }}
+                - configMapRef:
+                    name: {{ include "app.fullname" $ }}-{{ .name }}-cm
+                {{- end }}
+                {{- end }}
+                {{- if $job.secrets }}
+                {{- range $job.secrets }}
+                - secretRef:
+                    name: {{ include "app.fullname" $ }}-{{ .name }}-secret
+                {{- end }}
+                {{- end }}
+              {{- if $job.command }}
+              command:
+                {{- range $cmd := $job.command }}
+                - {{ $cmd | quote }}
+                {{- end }}
+              {{- end }}
+          {{- end }}
+---
+{{- end }}
+{{- end }}

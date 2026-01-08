@@ -1,0 +1,100 @@
+{{- range $key, $value := .Values.statefulSets }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "app.fullname" $ }}-{{ $key }}-sts
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" $ | nindent 6 }}
+  serviceName: {{ $value.serviceName }}
+  {{- if $value.replicaCount }}
+  replicas: {{ $value.replicaCount }}
+  {{- end }}
+  {{- if $value.minReadySeconds }}
+  minReadySeconds: 10
+  {{- end }}
+  template:
+    metadata:
+      {{- with $value.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "app.labels" $ | nindent 8 }}
+        {{- with $value.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{ if $value.terminationGracePeriodSeconds}}
+      terminationGracePeriodSeconds: 10
+      {{- end }}
+      {{- with $value.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "app.serviceAccountName" $ }}
+      securityContext:
+        {{- toYaml $value.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ include "app.fullname" $ }}-{{ $key }}-container
+        securityContext:
+          {{- toYaml $value.securityContext | nindent 12 }}
+        image: "{{ $value.image.repository }}:{{ $value.image.tag | default $.Chart.AppVersion }}"
+        {{if $value.image.pullPolicy}}
+        imagePullPolicy: {{ $value.image.pullPolicy }}
+        {{- end }}
+        ports:
+          - name: {{ $key }}-port-int
+            containerPort: {{ $value.image.port }}
+            protocol: TCP
+        {{- if $value.command }}
+        command:
+          {{- toYaml $value.command | nindent 12 }}
+        {{- end }}
+        livenessProbe:
+          {{- toYaml $value.livenessProbe | nindent 12 }}
+        readinessProbe:
+          {{- toYaml $value.readinessProbe | nindent 12 }}
+        resources:
+          {{- toYaml $value.resources | nindent 12 }}
+        {{- if or $value.configmaps $value.secrets }}
+        envFrom:
+          {{- if $value.configmaps }}
+          {{- range $value.configmaps }}
+          - configMapRef:
+              name: {{ include "app.fullname" $ }}-{{ .name }}-cm
+          {{- end }}
+          {{- end }}
+          {{- if $value.secrets }}
+          {{- range $value.secrets }}
+          - secretRef:
+              name: {{ include "app.fullname" $ }}-{{ .name }}-secret
+          {{- end }}
+          {{- end }}
+        {{- end }}
+        {{- if $value.volume }}
+        volumeMounts:
+          - name: {{ include "app.fullname" $ }}-{{ $value.volume.name }}-pv
+            mountPath: {{ $value.volume.mountPath | quote }}
+        {{- end }}
+  {{- if $value.volume }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ include "app.fullname" $ }}-{{ $value.volume.name }}-pv
+    spec:
+      accessModes:
+        {{- range $value.volume.accessModes }}
+        - {{ . }}
+        {{- end }}
+      resources:
+        requests:
+          storage: {{ $value.volume.size }}
+      {{- if $value.volume.storageClassName }}
+      storageClassName: {{ $value.volume.storageClassName }}
+      {{- end }}
+  {{- end }}
+---
+{{- end }}

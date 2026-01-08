@@ -1,0 +1,107 @@
+{{- range $key, $value := .Values.deploys }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "app.fullname" $ }}-{{ $key }}-deploy
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+spec:
+  {{- if not (index $.Values.autoscaling $key).enabled }}
+  replicas: {{ $value.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $key }}
+  template:
+    metadata:
+      {{- with $value.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "app.labels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $key }}
+        {{- with $value.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with $value.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "app.serviceAccountName" $ }}
+      securityContext:
+        {{- toYaml $value.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ include "app.fullname" $ }}-{{ $key }}-container
+          securityContext:
+            {{- toYaml $value.securityContext | nindent 12 }}
+          image: "{{ $value.image.repository }}:{{ $value.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $value.image.pullPolicy }}
+          ports:
+            - name: {{ $key }}-port-int
+              containerPort: {{ $value.image.port }}
+              protocol: TCP
+          {{- if $value.command }}
+          command:
+            {{- toYaml $value.command | nindent 12 }}
+          {{- end }}
+          {{- if $value.args }}
+          args:
+            {{- range $arg := $value.args }}
+            - {{ $arg | quote }}
+            {{- end }}
+          {{- end }}
+          livenessProbe:
+            {{- toYaml $value.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml $value.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml $value.resources | nindent 12 }}
+          {{- if or $value.configmaps $value.secrets }}
+          envFrom:
+            {{- if $value.configmaps }}
+            {{- range $value.configmaps }}
+            - configMapRef:
+                name: {{ include "app.fullname" $ }}-{{ .name }}-cm
+            {{- end }}
+            {{- end }}
+            {{- if $value.secrets }}
+            {{- range $value.secrets }}
+            - secretRef:
+                name: {{ include "app.fullname" $ }}-{{ .name }}-secret
+            {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- if $value.volumes }}
+          volumeMounts:
+            {{- range $value.volumes }}
+            - name: {{ .name }}-pv
+              mountPath: {{ .mountPath | quote }}
+            {{- end }}
+          {{- end }}
+
+      {{- if $value.volumes }}
+      volumes:
+        {{- range $value.volumes }}
+        - name: {{ .name }}-pv
+          persistentVolumeClaim:
+            claimName: {{ include "app.fullname" $ }}-{{ .name }}-pvc
+        {{- end }}
+      {{- end }}
+
+      {{- with $value.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $value.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $value.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+{{- end }}

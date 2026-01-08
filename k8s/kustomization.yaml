@@ -1,7 +1,0 @@
-namespace: semantic-search-ns
-
-resources:
-  - ns.yaml
-  - deployment.yaml
-  - init_env_cm.yaml
-  - env_cm.yaml

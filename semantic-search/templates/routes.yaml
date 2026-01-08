@@ -1,0 +1,63 @@
+{{- range $key, $value := .Values.ingressRoutes -}}
+{{- if $value.enabled -}}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "app.fullname" $ }}-{{ $key }}-route
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+  {{- with $value.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  entryPoints:
+    {{- range $value.entryPoints }}
+    - {{ . }}
+    {{- end }}
+  routes:
+    {{- range $value.routes }}
+    - match: {{ .match | quote}}
+      kind: Rule
+      services:
+        {{- range .services }}
+        - name: {{ include "app.fullname" $ }}-{{ .service }}-svc
+          port: {{ (index $.Values.services .service).port }}
+        {{- end }}
+      {{- if .middlewares }}
+      middlewares:
+        {{- range .middlewares }}
+        - name: {{ include "app.fullname" $ }}-{{ .name }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- if $value.tls }}    
+  tls:
+    {{- range $value.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+{{- range $value.routes }}
+{{- range .middlewares }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "app.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "app.labels" $ | nindent 4 }}
+  {{- with $value.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- toYaml .spec | nindent 2 }}
+{{- end }}
+{{- end }}
+---
+{{- end }}
+{{ end }}

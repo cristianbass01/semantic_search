@@ -1,0 +1,347 @@
+
+# This is to override the chart name.
+nameOverride: "search"
+fullnameOverride: "search-app"
+
+# ConfigMaps to set environment variables for the application
+configmaps:
+  pg:
+    POSTGRES_HOST: search-app-pg-svc
+    POSTGRES_PORT: "5432"
+    POSTGRES_DB: tickets-db
+    POSTGRES_USER: postgres
+  
+  redis:
+    REDIS_HOST: search-app-redis-svc
+    REDIS_PORT: "6379"
+    REDIS_QUEUE: ticket_queue
+
+  embed:
+    HF_EMBEDDINGS_HOST: search-app-embed-svc
+    HF_EMBEDDINGS_PORT: "8000"
+
+# Secrets to set sensitive environment variables for the application
+secrets:
+  pg:
+    POSTGRES_PASSWORD: password
+  
+  redis:
+    REDIS_PASSWORD: password
+
+# Deployment configurations for different components of the application
+deploys:
+  # Web deployment configuration
+  web:
+    replicaCount: 1
+    # Docker image configuration
+    image:
+      repository: cristianbassotto/search-web
+      tag: "0.0.11"
+      pullPolicy: IfNotPresent
+      port: 80
+    # Resource requests and limits
+    resources: 
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 128Mi
+  
+  # Worker deployment configuration
+  worker:
+    replicaCount: 1
+    # Docker image configuration
+    image:
+      repository: cristianbassotto/search-worker
+      tag: "0.0.11"
+      pullPolicy: IfNotPresent
+      port: 8080
+    # Configmaps and secrets
+    configmaps:
+      - name: pg
+      - name: redis
+      - name: embed
+    secrets:
+      - name: pg
+      - name: redis
+    # Resource requests and limits
+    resources: 
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 128Mi
+
+  # API deployment configuration
+  api:
+    replicaCount: 1
+    # Docker image configuration
+    image:
+      repository: cristianbassotto/search-api
+      tag: "0.0.11"
+      pullPolicy: IfNotPresent
+      port: 5000
+    # Configmaps and secrets
+    configmaps:
+      - name: pg
+      - name: redis
+      - name: embed
+    secrets:
+      - name: pg
+      - name: redis
+    # Resource requests and limits
+    resources: 
+      limits:
+        cpu: 500m
+        memory: 512Gi
+      requests:
+        cpu: 250m
+        memory: 128Mi
+  
+  # Embed 
+  embed: 
+    replicaCount: 1
+    # Hugging face image
+    image:
+      repository: ghcr.io/huggingface/text-embeddings-inference
+      tag: "cpu-latest"
+      pullPolicy: IfNotPresent
+      port: 80
+    # Resources requests and limits
+    resources: 
+      limits:
+        cpu: 2000m
+        memory: 3Gi
+      requests:
+        cpu: 1000m
+        memory: 1Gi
+    # Volume to save cache
+    volumes:
+      - name: hf-cache
+        mountPath: "/data"
+    # Arguments to initialize the model
+    args:
+      - "--model-id"
+      - "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    
+# Service Account configuration
+serviceAccount:
+  create: false
+  name: ""
+
+# StatefulSet configurations for databases like PostgreSQL and Redis
+statefulSets:
+  # PostgreSQL configuration
+  pg:
+    replicaCount: 1
+    # Docker image configuration
+    image:
+      repository: pgvector/pgvector
+      tag: pg18-trixie
+      pullPolicy: IfNotPresent
+      port: 5432
+    # Service name
+    serviceName: pg 
+    # Configmaps and secrets
+    configmaps:
+      - name: pg
+    secrets:
+      - name: pg
+    # Persistent Volume configuration
+    volume:
+      name: pg
+      mountPath: /var/lib/postgresql
+      accessModes: 
+        - ReadWriteOnce 
+      size: 2Gi
+      storageClassName: standard
+    # Resource requests and limits
+    resources: 
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi 
+    # Liveness and Readiness Probes
+    readinessProbe:
+      exec:
+        command: ["pg_isready", "-U", "postgres"]
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    livenessProbe:
+      exec:
+        command: ["pg_isready", "-U", "postgres"]
+      initialDelaySeconds: 10
+      periodSeconds: 60
+
+  # Redis configuration
+  redis:
+    replicaCount: 1
+    # Docker image configuration
+    image:
+      repository: "redis"
+      tag: "7.0"
+      pullPolicy: IfNotPresent
+      port: 6379
+    # Custom
+    command: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)"]
+    # Configmaps and secrets
+    configmaps:
+      - name: redis
+    secrets:
+      - name: redis
+    # Service name
+    serviceName: redis
+    # Persistent Volume configuration
+    volume:
+      name: redis
+      mountPath: /data
+      accessModes: 
+        - ReadWriteOnce 
+      size: 1Gi
+      storageClassName: standard
+    # Resource requests and limits
+    resources: 
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+    
+    # Liveness and Readiness Probes
+    readinessProbe:
+      exec:
+        command: ["redis-cli", "ping"]
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    livenessProbe:
+      exec:
+        command: ["redis-cli", "ping"]
+      initialDelaySeconds: 10
+      periodSeconds: 60
+
+# Service definitions for different components of the application
+services:
+  web:
+    port: 80
+  worker:
+    port: 8080
+  api:
+    port: 5000
+  pg:
+    port: 5432
+  redis:
+    port: 6379
+  embed:
+    port: 8000
+
+# IngressRoute configurations for Traefik to route external traffic to internal services 
+ingressRoutes:
+  frontend:
+    enabled: true
+    entryPoints:
+      - web
+    routes:
+      - match: Host(`localhost`)
+        services:
+          - service: web
+    tls: []
+  api:
+    enabled: true
+    entryPoints:
+      - web
+    routes:
+      - match: Host(`localhost`) && PathPrefix(`/api`)
+        services:
+          - service: api
+    tls: []
+
+# Horizontal Pod Autoscaling configurations
+autoscaling:
+  web:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+  worker:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+  api:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 2
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+  embed:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 2
+    targetCPUUtilizationPercentage: 80
+
+# Additional StorageClasses
+storageClasses: {}
+
+# Additional Persistent Volume Claims
+volumeClaims:
+  hf-cache:
+    accessModes:
+      - ReadWriteOnce
+    size: 4Gi
+    storageClassName: standard
+
+# CronJobs for periodic tasks such as database maintenance
+cronJobs:
+  pg-maintenance:
+    enabled: true
+    schedule: "0 3 * * 0" # Every Sunday at 3 AM
+    concurrencyPolicy: Forbid
+    restartPolicy: OnFailure
+    jobs:
+      - image:
+          repository: pgvector/pgvector
+          tag: pg18-trixie
+          imagePullPolicy: IfNotPresent
+        configmaps:
+          - name: pg
+        secrets:
+          - name: pg
+        command:
+          - /bin/bash
+          - -c
+          - |
+            set -e
+
+            echo "Starting PostgreSQL maintenance..."
+            
+            # psql expects PGPASSWORD, not POSTGRES_PASSWORD
+            export PGPASSWORD="$POSTGRES_PASSWORD"
+
+            echo "Reindexing IVFFlat index..."
+            psql \
+              -h "$POSTGRES_HOST" \
+              -p "$POSTGRES_PORT" \
+              -U "$POSTGRES_USER" \
+              -d "$POSTGRES_DB" \
+              --no-password \
+              -v ON_ERROR_STOP=1 \
+              -c "REINDEX INDEX CONCURRENTLY tickets_embedding_idx;"
+
+            echo "Running VACUUM ANALYZE on tickets table..."
+            psql \
+              -h "$POSTGRES_HOST" \
+              -p "$POSTGRES_PORT" \
+              -U "$POSTGRES_USER" \
+              -d "$POSTGRES_DB" \
+              --no-password \
+              -v ON_ERROR_STOP=1 \
+              -c "VACUUM ANALYZE tickets;"
+
+            echo "Maintenance completed successfully."
